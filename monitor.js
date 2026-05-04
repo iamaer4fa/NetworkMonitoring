@@ -17,12 +17,12 @@ const community_string = process.env.COMMUNITY_STRING
 
 // Network Topology Mapping (Mapping IPs to your ptp_links table IDs)
 const devices = [
-    { ip: '10.10.10.2', name: 'Bunawan AP', linkId: 1, community: community_string, version: snmp.Version2c, ifIndex: 1 },
-    { ip: '10.10.10.3', name: 'Panabo Gateway (Bunawan)', linkId: 1, community: community_string, version: snmp.Version2c, ifIndex: 1 },
-    { ip: '10.10.10.4', name: 'Panabo Gateway (Carmen)', linkId: 2, community: community_string, version: snmp.Version2c, ifIndex: 1 },
-    { ip: '10.10.10.5', name: 'Carmen AP', linkId: 2, community: community_string, version: snmp.Version2c, ifIndex: 1 },
-    { ip: '10.10.10.1', name: 'SMPC Davao Aruba Gateway', linkId: 4, community: community_string, version: snmp.Version2c, ifIndex: 8 }, //Aruba 9012 SMPC Bunawan
-    { ip: '10.10.10.6', name: 'SCPC Carmen Aruba Gateway', linkId: 3, community: community_string, version: snmp.Version2c, ifIndex: 3 } //Aruba 9012 SCPC Carmen
+    { ip: '10.10.10.2', name: 'Bunawan AP', linkId: 1, community: community_string, version: snmp.Version2c, ifIndex: 1, type: 'Cambium' },
+    { ip: '10.10.10.3', name: 'Panabo Gateway (Bunawan)', linkId: 1, community: community_string, version: snmp.Version2c, ifIndex: 1, type: 'Cambium' },
+    { ip: '10.10.10.4', name: 'Panabo Gateway (Carmen)', linkId: 2, community: community_string, version: snmp.Version2c, ifIndex: 1, type: 'Cambium' },
+    { ip: '10.10.10.5', name: 'Carmen AP', linkId: 2, community: community_string, version: snmp.Version2c, ifIndex: 1, type: 'Cambium' },
+    { ip: '10.10.10.1', name: 'SMPC Davao Aruba Gateway', linkId: 4, community: community_string, version: snmp.Version2c, ifIndex: 8, type: 'Aruba' }, //Aruba 9012 SMPC Bunawan
+    { ip: '10.10.10.6', name: 'SCPC Carmen Aruba Gateway', linkId: 3, community: community_string, version: snmp.Version2c, ifIndex: 3, type: 'Aruba' } //Aruba 9012 SCPC Carmen
 ];
 
 // NOTE: You will need to extract the exact numeric OIDs from your CAMBIUM MIB files.
@@ -47,7 +47,10 @@ async function pollDevice(device) {
         const deviceTxOid = OIDS.txBytes64 + device.ifIndex;
 
         // Add the new 64-bit OIDs to our fetch list
-        const oidsToFetch = [OIDS.sysUpTime, OIDS.rssi, OIDS.snr, deviceRxOid, deviceTxOid];
+        const oidsToFetch = [OIDS.sysUpTime, deviceRxOid, deviceTxOid];
+        if (device.type === 'Cambium') {
+            oidsToFetch.push(OIDS.rssi, OIDS.snr);
+        }
 
         session.get(oidsToFetch, (error, varbinds) => {
             if (error) {
