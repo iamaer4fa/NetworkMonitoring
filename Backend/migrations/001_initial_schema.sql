@@ -44,20 +44,29 @@ DECLARE
     v_source_name VARCHAR;
     v_target_name VARCHAR;
     v_hardware VARCHAR;
+    v_frequency DECIMAL;
     v_max_capacity INT;
     v_high_traffic_count INT;
 BEGIN
-    -- 1. Fetch Location AND Max Capacity from the static topology table
+    -- 1. Fetch Location, Hardware, Frequency AND Max Capacity from the static topology table
     SELECT 
-        s_source.site_name, s_target.site_name, s_source.hardware_model, p.max_capacity_mbps
+        s_source.site_name, 
+        s_target.site_name, 
+        s_source.hardware_model, 
+        p.frequency_ghz, 
+        p.max_capacity_mbps
     INTO 
-        v_source_name, v_target_name, v_hardware, v_max_capacity
+        v_source_name, 
+        v_target_name, 
+        v_hardware, 
+        v_frequency, 
+        v_max_capacity
     FROM ptp_links p
     JOIN network_sites s_source ON p.source_site_id = s_source.site_id
     JOIN network_sites s_target ON p.target_site_id = s_target.site_id
     WHERE p.link_id = NEW.link_id;
 
-    -- 2. HARD OUTAGE CHECK (Existing Logic)
+    -- 2. HARD OUTAGE CHECK
     IF NEW.is_link_up = FALSE OR NEW.rssi_dbm < -80 THEN
         alert_payload = json_build_object(
             'event', 'LINK_DEGRADATION',
@@ -65,14 +74,17 @@ BEGIN
             'link_id', NEW.link_id,
             'source_site', v_source_name,
             'target_site', v_target_name,
+            'hardware', v_hardware,      -- Fixed: Added hardware back
+            'frequency', v_frequency,    -- Fixed: Added frequency back
             'rssi_dbm', NEW.rssi_dbm,
+            'snr_db', NEW.snr_db,        -- Fixed: Added snr_db back
             'timestamp', NEW.poll_timestamp
         );
         PERFORM pg_notify('network_alerts', alert_payload::text);
         RETURN NEW;
     END IF;
 
-    -- 3. CAPACITY EXHAUSTION CHECK (New Logic: 15-Minute Rolling Window)
+    -- 3. CAPACITY EXHAUSTION CHECK (15-Minute Rolling Window)
     IF (NEW.throughput_rx_mbps + NEW.throughput_tx_mbps) > (v_max_capacity * 0.90) THEN
         
         -- Count how many of the LAST 3 polls (15 mins) were above 90%
