@@ -5,7 +5,7 @@ require('dotenv').config();
 // Store the previous poll's byte counters to calculate deltas
 const previousPollState = {};
 
-// Database connection pool
+// Database connection pool+
 const pool = new Pool({
     user: process.env.DB_USER,
     host: process.env.DB_HOST,
@@ -20,7 +20,9 @@ const devices = [
     { ip: '10.10.10.2', name: 'Bunawan AP', linkId: 1, community: community_string, version: snmp.Version2c },
     { ip: '10.10.10.3', name: 'Panabo Gateway (Bunawan)', linkId: 1, community: community_string, version: snmp.Version2c },
     { ip: '10.10.10.4', name: 'Panabo Gateway (Carmen)', linkId: 2, community: community_string, version: snmp.Version2c },
-    { ip: '10.10.10.5', name: 'Carmen AP', linkId: 2, community: community_string, version: snmp.Version2c }
+    { ip: '10.10.10.5', name: 'Carmen AP', linkId: 2, community: community_string, version: snmp.Version2c },
+    { ip: '10.10.10.1', name: 'SMPC Davao Aruba Gateway', linkId: 4, community: community_string, version: snmp.Version2c, ifIndex: 8 }, //Aruba 9012 SMPC Bunawan
+    { ip: '10.10.10.6', name: 'SCPC Carmen Aruba Gateway', linkId: 3, community: community_string, version: snmp.Version2c, ifIndex: 3 } //Aruba 9012 SCPC Carmen
 ];
 
 // NOTE: You will need to extract the exact numeric OIDs from your CAMBIUM MIB files.
@@ -29,8 +31,8 @@ const OIDS = {
     sysUpTime: '1.3.6.1.2.1.1.3.0',
     rssi: '1.3.6.1.4.1.17713.21.1.2.1.0', // Replace with exact Cambium RSSI OID
     snr: '1.3.6.1.4.1.17713.21.1.2.2.0',  // Replace with exact Cambium SNR OID
-    rxBytes64: '1.3.6.1.2.1.31.1.1.1.6.1',  // 64-bit HC In Octets (Index 1)
-    txBytes64: '1.3.6.1.2.1.31.1.1.1.10.1', // 64-bit HC Out Octets (Index 1)
+    rxBytes64: '1.3.6.1.2.1.31.1.1.1.6',  // 64-bit HC In Octets (Index 1)
+    txBytes64: '1.3.6.1.2.1.31.1.1.1.10', // 64-bit HC Out Octets (Index 1)
     cpuLoad: '1.3.6.1.4.1.17713.1.2.2.1.4.1', // Cambium cnReach CPU Load
     noiseFloor: '1.3.6.1.4.1.17713.1.2.2.1.7.1' // Cambium cnReach Noise Floor
 
@@ -40,8 +42,12 @@ async function pollDevice(device) {
     return new Promise((resolve, reject) => {
         const session = snmp.createSession(device.ip, device.community, { version: device.version });
 
+        // Build the specific OIDs for this device's interface index
+        const deviceRxOid = OIDS.rxBytes64Base + device.ifIndex;
+        const deviceTxOid = OIDS.txBytes64Base + device.ifIndex;
+
         // Add the new 64-bit OIDs to our fetch list
-        const oidsToFetch = [OIDS.sysUpTime, OIDS.rssi, OIDS.snr, OIDS.rxBytes64, OIDS.txBytes64];
+        const oidsToFetch = [OIDS.sysUpTime, OIDS.rssi, OIDS.snr, deviceRxOid, deviceTxOid];
 
         session.get(oidsToFetch, (error, varbinds) => {
             if (error) {
