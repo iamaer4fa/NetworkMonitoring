@@ -17,39 +17,120 @@ const community_string = process.env.COMMUNITY_STRING
 
 // Network Topology Mapping (Mapping IPs to your ptp_links table IDs)
 const devices = [
-    { ip: '10.10.10.2', name: 'Bunawan AP', linkId: 1, community: community_string, version: snmp.Version2c, ifIndex: 1, type: 'Cambium' },
-    { ip: '10.10.10.3', name: 'Panabo Gateway (Bunawan)', linkId: 1, community: community_string, version: snmp.Version2c, ifIndex: 1, type: 'Cambium' },
-    { ip: '10.10.10.4', name: 'Panabo Gateway (Carmen)', linkId: 2, community: community_string, version: snmp.Version2c, ifIndex: 1, type: 'Cambium' },
-    { ip: '10.10.10.5', name: 'Carmen AP', linkId: 2, community: community_string, version: snmp.Version2c, ifIndex: 1, type: 'Cambium' },
-    { ip: '10.10.10.1', name: 'SMPC Davao Aruba Gateway', linkId: 4, community: community_string, version: snmp.Version2c, ifIndex: 8, type: 'Aruba' }, //Aruba 9012 SMPC Bunawan
-    { ip: '10.10.10.6', name: 'SCPC Carmen Aruba Gateway', linkId: 3, community: community_string, version: snmp.Version2c, ifIndex: 3, type: 'Aruba' } //Aruba 9012 SCPC Carmen
+    {
+        // Firmware version 4.6.1
+        // CAMBIUM MIB file: /usr/share/snmp/mibs/CAMBIUM-PMP80211-MIB.txt
+        // Role: AP — cambiumSTADLRSSI/SNR are SM-only OIDs, not available on AP side
+        ip: '10.10.10.2',
+        name: 'Bunawan AP',
+        linkId: 1,
+        community: community_string,
+        version: snmp.Version2c,
+        ifIndex: 1,
+        type: 'Cambium',
+        role: 'AP'
+    },
+    {
+        // Firmware version 4.8.1
+        // CAMBIUM MIB file: /usr/share/snmp/mibs/CAMBIUM-ePMP-4.8.0-MIB.txt
+        // Role: SM — this is the subscriber side, exposes RSSI/SNR scalars
+        ip: '10.10.10.3',
+        name: 'Panabo Gateway (Bunawan)',
+        linkId: 1,
+        community: community_string,
+        version: snmp.Version2c,
+        ifIndex: 1,
+        type: 'Cambium',
+        role: 'SM'
+    },
+    {
+        // Firmware version 4.8.1
+        // CAMBIUM MIB file: /usr/share/snmp/mibs/CAMBIUM-ePMP-4.8.0-MIB.txt
+        // Role: AP — AP side of the Carmen link
+        ip: '10.10.10.4',
+        name: 'Panabo Gateway (Carmen)',
+        linkId: 2,
+        community: community_string,
+        version: snmp.Version2c,
+        ifIndex: 1,
+        type: 'Cambium',
+        role: 'AP'
+    },
+    {
+        // Firmware version 4.6.1
+        // CAMBIUM MIB file: /usr/share/snmp/mibs/CAMBIUM-PMP80211-MIB.txt
+        // Role: SM — subscriber side of Carmen link, exposes RSSI/SNR scalars
+        ip: '10.10.10.5',
+        name: 'Carmen AP',
+        linkId: 2,
+        community: community_string,
+        version: snmp.Version2c,
+        ifIndex: 1,
+        type: 'Cambium',
+        role: 'SM'
+    },
+    {
+        // NOTE: This is the Aruba 9012 Device, no Aruba MIB file available
+        ip: '10.10.10.1',
+        name: 'SMPC Davao Aruba Gateway',
+        linkId: 4,
+        community: community_string,
+        version: snmp.Version2c,
+        ifIndex: 8,
+        type: 'Aruba'
+    },
+    {
+        // NOTE: This is the Aruba 9012 Device, no Aruba MIB file available
+        ip: '10.10.10.6',
+        name: 'SCPC Carmen Aruba Gateway',
+        linkId: 3,
+        community: community_string,
+        version: snmp.Version2c,
+        ifIndex: 3,
+        type: 'Aruba'
+    }
 ];
 
-// NOTE: You will need to extract the exact numeric OIDs from your CAMBIUM MIB files.
-// These are placeholder standard/generic OIDs for demonstration.
-const OIDS = {
-    sysUpTime: '1.3.6.1.2.1.1.3.0',
-    rssi: '1.3.6.1.4.1.17713.21.1.2.1.0', // Replace with exact Cambium RSSI OID
-    snr: '1.3.6.1.4.1.17713.21.1.2.2.0',  // Replace with exact Cambium SNR OID
-    rxBytes64: '1.3.6.1.2.1.31.1.1.1.6.',  // 64-bit HC In Octets (Index 1)
-    txBytes64: '1.3.6.1.2.1.31.1.1.1.10.', // 64-bit HC Out Octets (Index 1)
-    cpuLoad: '1.3.6.1.4.1.17713.1.2.2.1.4.1', // Cambium cnReach CPU Load
-    noiseFloor: '1.3.6.1.4.1.17713.1.2.2.1.7.1' // Cambium cnReach Noise Floor
+// OIDs verified from CAMBIUM-PMP80211-MIB.txt and CAMBIUM-ePMP-4.8.0-MIB.txt
+// Both MIB versions share identical OID assignments.
+// Scalar OIDs must end in .0 to address the single instance.
+// NOTE: sysUpTime uses the standard SNMPv2 OID (returns numeric TimeTicks) instead of
+// cambiumSystemUptime which returns a string ("dddd:hh:mm:ss") incompatible with BIGINT.
+const CAMBIUM_OIDS = {
+    sysUpTime:  '1.3.6.1.2.1.1.3.0',              // Standard sysUpTime — numeric TimeTicks (BIGINT-safe)
+    rssi:       '1.3.6.1.4.1.17713.21.1.2.3.0',   // cambiumSTADLRSSI — SM Downlink RSSI in dBm (SM role only)
+    snr:        '1.3.6.1.4.1.17713.21.1.2.18.0',  // cambiumSTADLSNR — SM Downlink SNR in dBm (SM role only)
+    rxBytes64:  '1.3.6.1.4.1.17713.21.2.1.2.0',   // cambiumEthRXBytes — Ethernet RX counter
+    txBytes64:  '1.3.6.1.4.1.17713.21.2.1.8.0',   // cambiumEthTXBytes — Ethernet TX counter
+    cpuLoad:    '1.3.6.1.4.1.17713.21.2.1.64.0',  // sysCPUUsage
+};
 
+// Standard IF-MIB OIDs for non-Cambium devices (e.g., Aruba).
+// These require the interface index (ifIndex) to be appended.
+const ARUBA_OIDS = {
+    sysUpTime:  '1.3.6.1.2.1.1.3.0',             // Standard SNMPv2 sysUpTime
+    rxBytes64:  '1.3.6.1.2.1.31.1.1.1.6.',        // IF-MIB ifHCInOctets base (append ifIndex)
+    txBytes64:  '1.3.6.1.2.1.31.1.1.1.10.',       // IF-MIB ifHCOutOctets base (append ifIndex)
 };
 
 async function pollDevice(device) {
     return new Promise((resolve, reject) => {
         const session = snmp.createSession(device.ip, device.community, { version: device.version });
 
-        // Build the specific OIDs for this device's interface index
-        const deviceRxOid = OIDS.rxBytes64 + device.ifIndex;
-        const deviceTxOid = OIDS.txBytes64 + device.ifIndex;
+        // Select the correct OID set based on device type
+        const isCambium = device.type === 'Cambium';
+        const oids = isCambium ? CAMBIUM_OIDS : ARUBA_OIDS;
 
-        // Add the new 64-bit OIDs to our fetch list
-        const oidsToFetch = [OIDS.sysUpTime, deviceRxOid, deviceTxOid];
-        if (device.type === 'Cambium') {
-            oidsToFetch.push(OIDS.rssi, OIDS.snr);
+        // Cambium counters are scalar (no ifIndex needed).
+        // Aruba uses standard IF-MIB which requires appending the ifIndex.
+        const deviceRxOid = isCambium ? oids.rxBytes64 : oids.rxBytes64 + device.ifIndex;
+        const deviceTxOid = isCambium ? oids.txBytes64 : oids.txBytes64 + device.ifIndex;
+
+        const oidsToFetch = [oids.sysUpTime, deviceRxOid, deviceTxOid];
+        // Only SM-role Cambium devices expose the RSSI/SNR scalar OIDs.
+        // AP-role devices do not have these and will return NoSuchInstance.
+        if (isCambium && device.role === 'SM') {
+            oidsToFetch.push(oids.rssi, oids.snr);
         }
 
         session.get(oidsToFetch, (error, varbinds) => {
@@ -66,9 +147,9 @@ async function pollDevice(device) {
                     if (snmp.isVarbindError(vb)) {
                         console.error(`[${device.name}] OID Error: ${snmp.varbindError(vb)}`);
                     } else {
-                        if (vb.oid === OIDS.sysUpTime) metrics.uptime = vb.value;
-                        if (vb.oid === OIDS.rssi) metrics.rssi = vb.value;
-                        if (vb.oid === OIDS.snr) metrics.snr = vb.value;
+                        if (vb.oid === oids.sysUpTime) metrics.uptime = vb.value;
+                        if (isCambium && vb.oid === oids.rssi) metrics.rssi = vb.value;
+                        if (isCambium && vb.oid === oids.snr) metrics.snr = vb.value;
 
                         // net-snmp returns 64-bit counters as Buffers. We convert them to standard Numbers for math.
                         if (vb.oid === deviceRxOid) currentRxBytes = Number('0x' + vb.value.toString('hex'));
