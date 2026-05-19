@@ -17,7 +17,7 @@ CREATE TABLE ptp_links (
     status VARCHAR(20) DEFAULT 'Active'
 );
 -- Spatial index for fast geographic queries
-CREATE INDEX idx_network_sites_location ON network_sites USING GIST (location)
+CREATE INDEX idx_network_sites_location ON network_sites USING GIST (location);
 
 CREATE INDEX idx_ptp_links_path ON ptp_links USING GIST (signal_path);
 

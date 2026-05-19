@@ -137,9 +137,9 @@ async function pollDevice(device) {
             if (error) {
                 console.error(`[${device.name}] SNMP Error: ${error.message}`);
                 // Return nulls and 0 Mbps on failure to trigger alerts properly
-                resolve({ linkId: device.linkId, uptime: null, rssi: null, snr: null, rxMbps: 0, txMbps: 0, isUp: false });
+                resolve({ linkId: device.linkId, deviceIp: device.ip, uptime: null, rssi: null, snr: null, rxMbps: 0, txMbps: 0, isUp: false });
             } else {
-                let metrics = { linkId: device.linkId, isUp: true, rxMbps: 0, txMbps: 0 };
+                let metrics = { linkId: device.linkId, deviceIp: device.ip, isUp: true, rxMbps: 0, txMbps: 0 };
                 let currentRxBytes = 0;
                 let currentTxBytes = 0;
 
@@ -158,21 +158,23 @@ async function pollDevice(device) {
                 });
 
                 // --- BANDWIDTH DELTA CALCULATION LOGIC ---
-                if (previousPollState[device.linkId]) {
-                    const prev = previousPollState[device.linkId];
+                const now = Date.now();
+                if (previousPollState[device.ip]) {
+                    const prev = previousPollState[device.ip];
 
                     const rxDelta = currentRxBytes - prev.rx;
                     const txDelta = currentTxBytes - prev.tx;
+                    const timeDeltaSeconds = (now - prev.timestamp) / 1000;
 
                     // Only calculate if the AP didn't reboot (which resets counters to 0)
-                    if (rxDelta >= 0 && txDelta >= 0) {
-                        metrics.rxMbps = (rxDelta * 8) / (300 * 1000000);
-                        metrics.txMbps = (txDelta * 8) / (300 * 1000000);
+                    if (rxDelta >= 0 && txDelta >= 0 && timeDeltaSeconds > 0) {
+                        metrics.rxMbps = (rxDelta * 8) / (timeDeltaSeconds * 1000000);
+                        metrics.txMbps = (txDelta * 8) / (timeDeltaSeconds * 1000000);
                     }
                 }
 
-                // Save current state for the NEXT 5-minute poll
-                previousPollState[device.linkId] = { rx: currentRxBytes, tx: currentTxBytes };
+                // Save current state for the NEXT poll
+                previousPollState[device.ip] = { rx: currentRxBytes, tx: currentTxBytes, timestamp: now };
                 // -----------------------------------------
 
                 session.close();
@@ -184,16 +186,16 @@ async function pollDevice(device) {
 
 async function saveMetricsToDb(metrics) {
     const query = `
-        INSERT INTO link_metrics (link_id, rssi_dbm, snr_db, uptime_ticks, is_link_up,throughput_rx_mbps,throughput_tx_mbps)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO link_metrics (link_id, device_ip, rssi_dbm, snr_db, uptime_ticks, is_link_up, throughput_rx_mbps, throughput_tx_mbps)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
     `;
 
     for (const data of metrics) {
         try {
-            await pool.query(query, [data.linkId, data.rssi, data.snr, data.uptime, data.isUp, data.rxMbps, data.txMbps]);
-            console.log(`Successfully saved metrics for Link ID: ${data.linkId}`);
+            await pool.query(query, [data.linkId, data.deviceIp, data.rssi, data.snr, data.uptime, data.isUp, data.rxMbps, data.txMbps]);
+            console.log(`Successfully saved metrics for Link ID: ${data.linkId} (IP: ${data.deviceIp})`);
         } catch (err) {
-            console.error(`Database Error for Link ID ${data.linkId}:`, err.message);
+            console.error(`Database Error for Link ID ${data.linkId} (IP: ${data.deviceIp}):`, err.message);
         }
     }
 }

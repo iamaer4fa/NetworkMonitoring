@@ -1,10 +1,12 @@
 module.exports = {
   apps : [{
-    script: 'index.js',
-    watch: '.'
+    name: 'network-monitor',
+    script: 'monitor.js',
+    watch: false
   }, {
-    script: './service-worker/',
-    watch: ['./service-worker']
+    name: 'network-alerts',
+    script: 'alert_manager.js',
+    watch: false
   }],
 
   deploy : {
